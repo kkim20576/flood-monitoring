@@ -1,0 +1,11 @@
+{
+  "name": "flood-monitoring-system",
+  "version": "1.0.0",
+  "description": "Real-time flood monitoring with Arduino GSM+GPS",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.38.0"
+  },
+  "scripts": {
+    "dev": "vercel dev"
+  }
+}

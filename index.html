@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌊 Real-Time Flood Monitoring</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+        }
+        
+        .container {
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            grid-template-rows: auto 1fr;
+            gap: 20px;
+            padding: 20px;
+            height: 100vh;
+        }
+        
+        .header {
+            grid-column: 1 / -1;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            text-align: center;
+        }
+        
+        .sidebar {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        #map {
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            height: 100%;
+        }
+        
+        .water-level-display {
+            text-align: center;
+            padding: 20px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        }
+        
+        .water-level {
+            font-size: 3.5em;
+            font-weight: 800;
+            margin: 10px 0;
+            font-family: 'Arial Black', sans-serif;
+        }
+        
+        .level-safe { color: #10B981; }
+        .level-warning { color: #F59E0B; }
+        .level-danger { color: #EF4444; }
+        .level-extreme { color: #8B5CF6; }
+        
+        .status-indicator {
+            padding: 12px 20px;
+            border-radius: 25px;
+            font-weight: 600;
+            font-size: 1.1em;
+            text-align: center;
+            margin: 10px 0;
+        }
+        
+        .info-card {
+            background: rgba(255, 255, 255, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .gps-status {
+            background: #1F2937;
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        
+        .history-item {
+            padding: 8px 12px;
+            margin: 5px 0;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 6px;
+            border-left: 3px solid #667eea;
+            font-size: 0.9em;
+        }
+        
+        .last-update {
+            text-align: center;
+            font-size: 0.9em;
+            color: #6B7280;
+            margin-top: 10px;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🌊 Real-Time Flood Monitoring System</h1>
+            <p>Live GPS Tracking & Water Level Data</p>
+            <div id="connectionStatus" class="status-indicator" style="background: #10B981; color: white;">
+                ✅ CONNECTED TO LIVE DATA
+            </div>
+        </div>
+        
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <!-- Water Level Card -->
+            <div class="water-level-display">
+                <h3>💧 CURRENT WATER LEVEL</h3>
+                <div id="waterLevel" class="water-level level-safe">0.0 ft</div>
+                <div id="alertStatus" class="status-indicator" style="background: #10B981; color: white;">
+                    🟢 SAFE LEVEL
+                </div>
+            </div>
+            
+            <!-- GPS Information -->
+            <div class="info-card">
+                <h3>📍 GPS INFORMATION</h3>
+                <div class="gps-status">
+                    <div>Latitude: <span id="gpsLat">0.000000</span></div>
+                    <div>Longitude: <span id="gpsLng">0.000000</span></div>
+                    <div>Satellites: <span id="gpsSats">0</span></div>
+                    <div>Accuracy: <span id="gpsAccuracy">0</span> meters</div>
+                </div>
+            </div>
+            
+            <!-- Device Information -->
+            <div class="info-card">
+                <h3>📱 DEVICE STATUS</h3>
+                <div class="info-grid">
+                    <div>Device ID: <strong id="deviceId">flood_monitor_01</strong></div>
+                    <div>Updates: <strong id="updateCount">0</strong></div>
+                    <div>Status: <strong id="deviceStatus">Active</strong></div>
+                    <div>Battery: <strong>🟢 Good</strong></div>
+                </div>
+            </div>
+            
+            <!-- Recent History -->
+            <div class="info-card">
+                <h3>📊 RECENT UPDATES</h3>
+                <div id="historyList">
+                    <div class="history-item">No data yet</div>
+                </div>
+            </div>
+            
+            <div class="last-update">
+                Last updated: <span id="lastUpdate">--:--:--</span>
+            </div>
+        </div>
+        
+        <!-- Map -->
+        <div id="map"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        // Configuration
+        const API_URL = '/api/data'; // Vercel API route
+        let updateCount = 0;
+        let currentMarker = null;
+        let accuracyCircle = null;
+        const history = [];
+        
+        // Initialize Map
+        const map = L.map('map').setView([14.6500, 121.1000], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        
+        // Alert Level Configuration
+        const ALERT_LEVELS = {
+            SAFE: { max: 1.0, color: '#10B981', bgColor: '#10B981', message: '🟢 SAFE LEVEL' },
+            WARNING: { max: 3.0, color: '#F59E0B', bgColor: '#F59E0B', message: '🟡 WARNING - MONITOR' },
+            DANGER: { max: 6.0, color: '#EF4444', bgColor: '#EF4444', message: '🔴 DANGER - PREPARE' },
+            EXTREME: { max: 999.0, color: '#8B5CF6', bgColor: '#8B5CF6', message: '🚨 EXTREME - EVACUATE' }
+        };
+        
+        // Fetch data from Supabase via Vercel API
+        async function fetchData() {
+            try {
+                const response = await fetch(API_URL);
+                const result = await response.json();
+                
+                if (result.success && result.data.length > 0) {
+                    const latestData = result.data[0];
+                    updateDisplay(latestData);
+                    updateCount++;
+                }
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                document.getElementById('connectionStatus').style.background = '#EF4444';
+                document.getElementById('connectionStatus').innerHTML = '❌ CONNECTION ERROR';
+            }
+        }
+        
+        // Update display with new data
+        function updateDisplay(data) {
+            const waterLevel = parseFloat(data.water_level);
+            const lat = parseFloat(data.latitude);
+            const lng = parseFloat(data.longitude);
+            const satellites = data.satellites;
+            
+            // Update water level display
+            const waterLevelElement = document.getElementById('waterLevel');
+            const alertElement = document.getElementById('alertStatus');
+            const alertLevel = getAlertLevel(waterLevel);
+            
+            waterLevelElement.textContent = waterLevel.toFixed(1) + ' ft';
+            waterLevelElement.className = `water-level level-${alertLevel.name.toLowerCase()}`;
+            alertElement.textContent = alertLevel.message;
+            alertElement.style.background = alertLevel.bgColor;
+            alertElement.style.color = 'white';
+            
+            // Update GPS information
+            document.getElementById('gpsLat').textContent = lat.toFixed(6);
+            document.getElementById('gpsLng').textContent = lng.toFixed(6);
+            document.getElementById('gpsSats').textContent = satellites;
+            document.getElementById('gpsAccuracy').textContent = Math.max(10, 50 - (satellites * 5));
+            
+            // Update device info
+            document.getElementById('deviceId').textContent = data.device_id;
+            document.getElementById('updateCount').textContent = updateCount;
+            document.getElementById('lastUpdate').textContent = new Date(data.created_at).toLocaleTimeString();
+            
+            // Update map
+            updateMap(lat, lng, waterLevel, satellites, alertLevel);
+            
+            // Add to history
+            addToHistory(data);
+            
+            // Update connection status
+            document.getElementById('connectionStatus').style.background = '#10B981';
+            document.getElementById('connectionStatus').innerHTML = '✅ LIVE DATA CONNECTED';
+        }
+        
+        // Update map with current location
+        function updateMap(lat, lng, waterLevel, satellites, alertLevel) {
+            // Remove old marker and circle
+            if (currentMarker) map.removeLayer(currentMarker);
+            if (accuracyCircle) map.removeLayer(accuracyCircle);
+            
+            // Calculate accuracy based on satellites
+            const accuracy = Math.max(10, 50 - (satellites * 5));
+            
+            // Add accuracy circle
+            accuracyCircle = L.circle([lat, lng], {
+                color: alertLevel.bgColor,
+                fillColor: alertLevel.bgColor,
+                fillOpacity: 0.2,
+                radius: accuracy
+            }).addTo(map);
+            
+            // Create custom marker based on alert level
+            const markerHtml = `
+                <div style="
+                    background: ${alertLevel.bgColor};
+                    color: white;
+                    padding: 10px;
+                    border-radius: 50%;
+                    width: 50px;
+                    height: 50px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 20px;
+                    border: 3px solid white;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+                ">
+                    ${waterLevel > 6 ? '🚨' : waterLevel > 3 ? '⚠️' : '💧'}
+                </div>
+            `;
+            
+            // Add marker
+            currentMarker = L.marker([lat, lng], {
+                icon: L.divIcon({
+                    html: markerHtml,
+                    iconSize: [50, 50],
+                    iconAnchor: [25, 25]
+                })
+            }).addTo(map)
+            .bindPopup(`
+                <div style="min-width: 200px;">
+                    <h3>🌊 Flood Monitor</h3>
+                    <p><strong>Water Level:</strong> ${waterLevel.toFixed(1)} ft</p>
+                    <p><strong>Status:</strong> ${alertLevel.message}</p>
+                    <p><strong>Location:</strong> ${lat.toFixed(6)}, ${lng.toFixed(6)}</p>
+                    <p><strong>Satellites:</strong> ${satellites}</p>
+                    <p><strong>Last Update:</strong> ${new Date().toLocaleTimeString()}</p>
+                </div>
+            `)
+            .openPopup();
+            
+            // Center map on current location
+            map.setView([lat, lng], 15);
+        }
+        
+        // Add data to history
+        function addToHistory(data) {
+            const historyItem = {
+                time: new Date(data.created_at).toLocaleTimeString(),
+                level: parseFloat(data.water_level).toFixed(1),
+                location: `${parseFloat(data.latitude).toFixed(4)}, ${parseFloat(data.longitude).toFixed(4)}`
+            };
+            
+            history.unshift(historyItem);
+            
+            // Keep only last 5 items
+            if (history.length > 5) history.pop();
+            
+            // Update history display
+            const historyList = document.getElementById('historyList');
+            historyList.innerHTML = '';
+            
+            history.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'history-item';
+                div.innerHTML = `
+                    <strong>${item.time}</strong><br>
+                    Level: ${item.level} ft | Location: ${item.location}
+                `;
+                historyList.appendChild(div);
+            });
+        }
+        
+        // Get alert level based on water level
+        function getAlertLevel(waterLevel) {
+            if (waterLevel < ALERT_LEVELS.SAFE.max) {
+                return { ...ALERT_LEVELS.SAFE, name: 'safe' };
+            } else if (waterLevel < ALERT_LEVELS.WARNING.max) {
+                return { ...ALERT_LEVELS.WARNING, name: 'warning' };
+            } else if (waterLevel < ALERT_LEVELS.DANGER.max) {
+                return { ...ALERT_LEVELS.DANGER, name: 'danger' };
+            } else {
+                return { ...ALERT_LEVELS.EXTREME, name: 'extreme' };
+            }
+        }
+        
+        // Fetch data every 10 seconds
+        setInterval(fetchData, 10000);
+        
+        // Initial fetch
+        fetchData();
+        
+        // Auto-refresh connection status
+        setInterval(() => {
+            const lastUpdate = document.getElementById('lastUpdate').textContent;
+            if (lastUpdate !== '--:--:--') {
+                const now = new Date();
+                const lastUpdateTime = new Date(`1970-01-01T${lastUpdate}`);
+                const diff = (now - lastUpdateTime) / 1000;
+                
+                if (diff > 60) {
+                    document.getElementById('connectionStatus').style.background = '#F59E0B';
+                    document.getElementById('connectionStatus').innerHTML = '🟡 DATA MAY BE DELAYED';
+                }
+            }
+        }, 30000);
+    </script>
+</body>
+</html>
